@@ -10,6 +10,8 @@ Routes:
   POST /fetch/<game_id>   – trigger a fresh API fetch and cache
 """
 
+import os
+
 from flask import Flask, render_template, jsonify, redirect, url_for, request, abort
 from data_loader import get_game_data, list_cached_games, _validate_game_id
 
@@ -101,4 +103,7 @@ def fetch_game(game_id: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=False, port=5000)
+    # Bind to loopback by default and prefer port 5000 unless overridden.
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(debug=False, host=host, port=port)
