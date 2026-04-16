@@ -124,41 +124,48 @@ def _save_cache(game_id: str, data: dict) -> None:
 
 
 def _fetch_from_api(game_id: str) -> dict | None:
-    """Attempt to fetch game data from stats.nba.com. Returns None on failure."""
+    """Attempt to fetch game data from stats.nba.com via V3 endpoints. Returns None on failure."""
     try:
         from nba_api.stats.endpoints import (
-            boxscoresummaryv2,
-            boxscoretraditionalv2,
+            boxscoresummaryv3,
+            boxscoretraditionalv3,
         )
-        from nba_api.stats.static import teams as nba_teams
+
+        def _si(val, default=0):
+            """Safe int: handles None, NaN, and strings."""
+            try:
+                if val is None:
+                    return default
+                f = float(val)
+                import math
+                return default if math.isnan(f) else int(f)
+            except (TypeError, ValueError):
+                return default
 
         time.sleep(0.6)  # respect rate limit
-
-        summary_ep = boxscoresummaryv2.BoxScoreSummaryV2(game_id=game_id, timeout=15)
+        summary_ep = boxscoresummaryv3.BoxScoreSummaryV3(game_id=game_id, timeout=15)
         summary_dfs = summary_ep.get_data_frames()
-        game_summary = summary_dfs[0].iloc[0]
-        line_score_df = summary_dfs[5]
+        # df[0]: game header  df[1]: date/attendance  df[2]: arena  df[4]: line scores
+        header = summary_dfs[0].iloc[0]
+        date_row = summary_dfs[1].iloc[0]
+        arena_row = summary_dfs[2].iloc[0]
+        line_score_df = summary_dfs[4]
 
-        time.sleep(0.6)
-        box_ep = boxscoretraditionalv2.BoxScoreTraditionalV2(game_id=game_id, timeout=15)
-        box_dfs = box_ep.get_data_frames()
-        team_df = box_dfs[1]
-        player_df = box_dfs[0]
+        home_tid = _si(header.get("homeTeamId"))
+        away_tid = _si(header.get("awayTeamId"))
 
-        # Build line score
-        home_row = line_score_df[line_score_df["TEAM_ABBREVIATION"] == game_summary["HOME_TEAM_ABBREVIATION"]].iloc[0]
-        away_row = line_score_df[line_score_df["TEAM_ABBREVIATION"] == game_summary["VISITOR_TEAM_ABBREVIATION"]].iloc[0]
+        home_ls = line_score_df[line_score_df["teamId"] == home_tid].iloc[0]
+        away_ls = line_score_df[line_score_df["teamId"] == away_tid].iloc[0]
 
         def parse_line(row):
             return {
-                "q1": int(row.get("PTS_QTR1", 0) or 0),
-                "q2": int(row.get("PTS_QTR2", 0) or 0),
-                "q3": int(row.get("PTS_QTR3", 0) or 0),
-                "q4": int(row.get("PTS_QTR4", 0) or 0),
-                "total": int(row.get("PTS", 0) or 0),
+                "q1": _si(row.get("period1Score")),
+                "q2": _si(row.get("period2Score")),
+                "q3": _si(row.get("period3Score")),
+                "q4": _si(row.get("period4Score")),
+                "total": _si(row.get("score")),
             }
 
-        # Team color lookup (approximate)
         TEAM_COLORS = {
             "BOS": "#007A33", "LAL": "#552583", "MIA": "#98002E",
             "GSW": "#1D428A", "DAL": "#00538C", "DEN": "#0E2240",
@@ -172,76 +179,84 @@ def _fetch_from_api(game_id: str) -> dict | None:
             "LAC": "#C8102E", "WAS": "#002B5C", "PHI": "#006BB6",
         }
 
-        def build_team(row, summary_row, key):
-            abbr = summary_row[f"{key}_TEAM_ABBREVIATION"] if f"{key}_TEAM_ABBREVIATION" in summary_row.index else row["TEAM_ABBREVIATION"]
-            city = summary_row.get(f"{key}_TEAM_CITY", "") or ""
-            name = summary_row.get(f"{key}_TEAM_NICKNAME", "") or row.get("TEAM_NAME", abbr)
+        def build_team(ls_row):
+            abbr = str(ls_row.get("teamTricode", "")).strip()
+            city = str(ls_row.get("teamCity", "")).strip()
+            nick = str(ls_row.get("teamName", abbr)).strip()
             return {
-                "team_id": int(summary_row.get(f"{key}_TEAM_ID", 0) or 0),
+                "team_id": _si(ls_row.get("teamId")),
                 "abbreviation": abbr,
-                "name": f"{city} {name}".strip(),
+                "name": f"{city} {nick}".strip() or abbr,
                 "city": city,
                 "color": TEAM_COLORS.get(abbr, "#1a1a2e"),
                 "secondary_color": "#cccccc",
             }
 
-        def build_players(team_abbr):
-            rows = player_df[player_df["TEAM_ABBREVIATION"] == team_abbr]
+        time.sleep(0.6)
+        box_ep = boxscoretraditionalv3.BoxScoreTraditionalV3(game_id=game_id, timeout=15)
+        box_dfs = box_ep.get_data_frames()
+        # df[0]: player rows
+        player_df = box_dfs[0]
+
+        def build_players(team_tid):
+            rows = player_df[player_df["teamId"] == team_tid]
             players = []
             for _, p in rows.iterrows():
-                fg_m = int(p.get("FGM", 0) or 0)
-                fg_a = int(p.get("FGA", 0) or 0)
-                fg3_m = int(p.get("FG3M", 0) or 0)
-                fg3_a = int(p.get("FG3A", 0) or 0)
-                ft_m = int(p.get("FTM", 0) or 0)
-                ft_a = int(p.get("FTA", 0) or 0)
+                fname = str(p.get("firstName", "")).strip()
+                lname = str(p.get("familyName", "")).strip()
+                fg_m  = _si(p.get("fieldGoalsMade"))
+                fg_a  = _si(p.get("fieldGoalsAttempted"))
+                fg3_m = _si(p.get("threePointersMade"))
+                fg3_a = _si(p.get("threePointersAttempted"))
+                ft_m  = _si(p.get("freeThrowsMade"))
+                ft_a  = _si(p.get("freeThrowsAttempted"))
                 players.append({
-                    "name": str(p.get("PLAYER_NAME", "")),
-                    "position": str(p.get("START_POSITION", "")).strip() or "—",
-                    "min": str(p.get("MIN", "0:00")),
-                    "pts": int(p.get("PTS", 0) or 0),
-                    "reb": int(p.get("REB", 0) or 0),
-                    "ast": int(p.get("AST", 0) or 0),
-                    "stl": int(p.get("STL", 0) or 0),
-                    "blk": int(p.get("BLK", 0) or 0),
-                    "fg": f"{fg_m}-{fg_a}",
+                    "name": f"{fname} {lname}".strip(),
+                    "position": str(p.get("position", "")).strip() or "—",
+                    "min": str(p.get("minutes", "0:00")),
+                    "pts": _si(p.get("points")),
+                    "reb": _si(p.get("reboundsTotal")),
+                    "ast": _si(p.get("assists")),
+                    "stl": _si(p.get("steals")),
+                    "blk": _si(p.get("blocks")),
+                    "fg":  f"{fg_m}-{fg_a}",
                     "fg3": f"{fg3_m}-{fg3_a}",
-                    "ft": f"{ft_m}-{ft_a}",
-                    "to": int(p.get("TO", 0) or 0),
-                    "pf": int(p.get("PF", 0) or 0),
-                    "pm": int(p.get("PLUS_MINUS", 0) or 0),
+                    "ft":  f"{ft_m}-{ft_a}",
+                    "to":  _si(p.get("turnovers")),
+                    "pf":  _si(p.get("foulsPersonal")),
+                    "pm":  _si(p.get("plusMinusPoints")),
                 })
             return sorted(players, key=lambda x: x["pts"], reverse=True)
 
-        home_abbr = game_summary["HOME_TEAM_ABBREVIATION"]
-        away_abbr = game_summary["VISITOR_TEAM_ABBREVIATION"]
-        home_players = build_players(home_abbr)
-        away_players = build_players(away_abbr)
+        home_players = build_players(home_tid)
+        away_players = build_players(away_tid)
 
-        # Quarter leaders
-        def quarter_leader(players, q_key):
-            # We don't have per-quarter player splits in this endpoint; approximate
+        def quarter_leader(players):
             best = max(players, key=lambda p: p["pts"]) if players else {"name": "—", "pts": 0}
             return {"name": best["name"], "pts": best["pts"]}
 
+        game_date_raw = str(date_row.get("gameDate", "")).split("T")[0]
+        arena_name = str(arena_row.get("arenaName", "")).strip()
+        arena_city = str(arena_row.get("arenaCity", "")).strip()
+
         data = {
             "game_id": game_id,
-            "game_date": str(game_summary.get("GAME_DATE_EST", "")).split("T")[0],
-            "season": str(game_summary.get("SEASON", "")),
+            "game_date": game_date_raw,
+            "season": "",
             "series_info": f"NBA Playoffs – {game_id}",
-            "arena": str(game_summary.get("ARENA_NAME", "")),
-            "home_team": build_team(home_row, game_summary, "HOME"),
-            "away_team": build_team(away_row, game_summary, "VISITOR"),
+            "arena": f"{arena_name}, {arena_city}".strip(", "),
+            "home_team": build_team(home_ls),
+            "away_team": build_team(away_ls),
             "line_score": {
-                "home": parse_line(home_row),
-                "away": parse_line(away_row),
+                "home": parse_line(home_ls),
+                "away": parse_line(away_ls),
             },
             "home_players": home_players,
             "away_players": away_players,
             "quarter_leaders": {
                 f"q{q}": {
-                    "home": quarter_leader(home_players, f"q{q}"),
-                    "away": quarter_leader(away_players, f"q{q}"),
+                    "home": quarter_leader(home_players),
+                    "away": quarter_leader(away_players),
                 }
                 for q in range(1, 5)
             },
@@ -287,11 +302,8 @@ def get_game_data(game_id: str | None = None) -> dict:
         _save_cache(game_id, SAMPLE_GAME)
         return SAMPLE_GAME
 
-    # Unknown game_id with no cache and no API: return sample with id replaced
-    fallback = dict(SAMPLE_GAME)
-    fallback["game_id"] = game_id
-    fallback["series_info"] = f"NBA Playoffs – Game {game_id}"
-    return fallback
+    # No cache and API failed – caller handles None
+    return None
 
 
 def list_cached_games() -> list[dict]:

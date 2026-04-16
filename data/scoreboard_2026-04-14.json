@@ -1,0 +1,26 @@
+[
+  {
+    "game_id": "0052500111",
+    "game_date": "2026-04-14",
+    "series_info": "Charlotte leads 1\u201330",
+    "home": "CHA",
+    "away": "MIA",
+    "home_name": "Charlotte CHA",
+    "away_name": "Miami MIA",
+    "home_pts": 127,
+    "away_pts": 126,
+    "status": "Final"
+  },
+  {
+    "game_id": "0052500121",
+    "game_date": "2026-04-14",
+    "series_info": "Portland leads 1\u201330",
+    "home": "PHX",
+    "away": "POR",
+    "home_name": "Phoenix PHX",
+    "away_name": "Portland POR",
+    "home_pts": 110,
+    "away_pts": 114,
+    "status": "Final"
+  }
+]
