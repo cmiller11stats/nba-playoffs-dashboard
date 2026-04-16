@@ -26,8 +26,12 @@
 
   <div class="fetch-form">
     <p>Load a game by NBA Game ID:</p>
-    <form action="" method="get" onsubmit="window.location='/game/'+document.getElementById('gid').value; return false;">
-      <input id="gid" type="text" placeholder="e.g. 0042300401" maxlength="12" />
+    <form action="" method="get" onsubmit="
+      var gid = document.getElementById('gid').value.trim();
+      if (/^\d{10}$/.test(gid)) { window.location = '/game/' + gid; }
+      else { alert('Game ID must be exactly 10 digits.'); }
+      return false;">
+      <input id="gid" type="text" placeholder="e.g. 0042300401" maxlength="12" pattern="\d{10}" />
       <button type="submit">Load Game</button>
     </form>
   </div>

@@ -95,8 +95,21 @@ SAMPLE_GAME = {
 # nba_api helpers
 # ---------------------------------------------------------------------------
 
+import re
+
+# NBA game IDs are always exactly 10 decimal digits.
+_GAME_ID_RE = re.compile(r'^\d{10}$')
+
+
+def _validate_game_id(game_id: str) -> str:
+    """Raise ValueError if game_id is not a safe 10-digit NBA game ID string."""
+    if not _GAME_ID_RE.match(game_id):
+        raise ValueError(f"Invalid game_id: {game_id!r}")
+    return game_id
+
+
 def _cache_path(game_id: str) -> Path:
-    return CACHE_DIR / f"game_{game_id}.json"
+    return CACHE_DIR / f"game_{_validate_game_id(game_id)}.json"
 
 
 def _load_cache(game_id: str) -> dict | None:

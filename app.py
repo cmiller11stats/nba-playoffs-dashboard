@@ -11,7 +11,7 @@ Routes:
 """
 
 from flask import Flask, render_template, jsonify, redirect, url_for, request, abort
-from data_loader import get_game_data, list_cached_games
+from data_loader import get_game_data, list_cached_games, _validate_game_id
 
 app = Flask(__name__)
 
@@ -24,6 +24,10 @@ def index():
 
 @app.route("/game/<game_id>")
 def game(game_id: str):
+    try:
+        _validate_game_id(game_id)
+    except ValueError:
+        abort(400)
     data = get_game_data(game_id)
     if not data:
         abort(404)
@@ -65,6 +69,10 @@ def game(game_id: str):
 
 @app.route("/api/game/<game_id>")
 def api_game(game_id: str):
+    try:
+        _validate_game_id(game_id)
+    except ValueError:
+        return jsonify({"error": "Invalid game_id"}), 400
     data = get_game_data(game_id)
     if not data:
         return jsonify({"error": "Game not found"}), 404
@@ -77,6 +85,11 @@ def fetch_game(game_id: str):
     from pathlib import Path
     import os
 
+    try:
+        _validate_game_id(game_id)
+    except ValueError:
+        abort(400)
+
     cache_file = Path(__file__).parent / "data" / f"game_{game_id}.json"
     if cache_file.exists():
         os.remove(cache_file)
@@ -88,4 +101,4 @@ def fetch_game(game_id: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)
