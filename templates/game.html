@@ -1,0 +1,314 @@
+{% extends "base.html" %}
+{% block title %}{{ game.away_team.abbreviation }} @ {{ game.home_team.abbreviation }} – {{ game.series_info }}{% endblock %}
+
+{% block body %}
+
+<!-- ─────────────── SIDE NAV ─────────────── -->
+<nav class="side-nav" id="sideNav">
+  <a href="{{ url_for('index') }}" class="nav-home-link" title="All Games">🏠</a>
+  <div class="nav-dots">
+    <a class="nav-dot active" href="#section-overview"   title="Overview">  <span>Overview</span></a>
+    <a class="nav-dot"        href="#section-q1"         title="Q1">        <span>1st Quarter</span></a>
+    <a class="nav-dot"        href="#section-q2"         title="Q2">        <span>2nd Quarter</span></a>
+    <a class="nav-dot"        href="#section-q3"         title="Q3">        <span>3rd Quarter</span></a>
+    <a class="nav-dot"        href="#section-q4"         title="Q4">        <span>4th Quarter</span></a>
+    <a class="nav-dot"        href="#section-boxscore"   title="Box Score"> <span>Box Score</span></a>
+  </div>
+</nav>
+
+<!-- ─────────────── SCROLL CONTAINER ─────────────── -->
+<main class="scroll-container" id="scrollContainer">
+
+  <!-- ══════════════ SECTION 1: OVERVIEW ══════════════ -->
+  <section class="scroll-section section-overview" id="section-overview"
+           style="--home-color:{{ game.home_team.color }}; --away-color:{{ game.away_team.color }};">
+
+    <div class="overview-bg-split">
+      <div class="split-away"  style="background:{{ game.away_team.color }};"></div>
+      <div class="split-home"  style="background:{{ game.home_team.color }};"></div>
+    </div>
+
+    <div class="overview-content">
+      <div class="series-badge">{{ game.series_info }}</div>
+      <div class="overview-date">{{ game.game_date }} · {{ game.arena }}</div>
+
+      <div class="scoreboard">
+        <!-- Away team -->
+        <div class="score-block score-block--away">
+          <div class="team-city">{{ game.away_team.city }}</div>
+          <div class="team-name">{{ game.away_team.name.split()[-1] }}</div>
+          <div class="team-abbr">{{ game.away_team.abbreviation }}</div>
+          <div class="final-score" style="color:{{ game.away_team.color }}">
+            {{ game.line_score.away.total }}
+          </div>
+          {% if game.line_score.away.total > game.line_score.home.total %}
+          <div class="winner-badge">WINNER</div>
+          {% endif %}
+        </div>
+
+        <div class="score-divider">
+          <div class="final-label">FINAL</div>
+          <div class="line-score-mini">
+            <table>
+              <thead><tr><th></th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>T</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td>{{ game.away_team.abbreviation }}</td>
+                  <td>{{ game.line_score.away.q1 }}</td>
+                  <td>{{ game.line_score.away.q2 }}</td>
+                  <td>{{ game.line_score.away.q3 }}</td>
+                  <td>{{ game.line_score.away.q4 }}</td>
+                  <td class="total-col">{{ game.line_score.away.total }}</td>
+                </tr>
+                <tr>
+                  <td>{{ game.home_team.abbreviation }}</td>
+                  <td>{{ game.line_score.home.q1 }}</td>
+                  <td>{{ game.line_score.home.q2 }}</td>
+                  <td>{{ game.line_score.home.q3 }}</td>
+                  <td>{{ game.line_score.home.q4 }}</td>
+                  <td class="total-col">{{ game.line_score.home.total }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Home team -->
+        <div class="score-block score-block--home">
+          <div class="team-city">{{ game.home_team.city }}</div>
+          <div class="team-name">{{ game.home_team.name.split()[-1] }}</div>
+          <div class="team-abbr">{{ game.home_team.abbreviation }}</div>
+          <div class="final-score" style="color:{{ game.home_team.color }}">
+            {{ game.line_score.home.total }}
+          </div>
+          {% if game.line_score.home.total > game.line_score.away.total %}
+          <div class="winner-badge">WINNER</div>
+          {% endif %}
+        </div>
+      </div><!-- /scoreboard -->
+
+      <!-- Cumulative scoring chart -->
+      <div class="overview-chart-wrap">
+        <div class="chart-label">Cumulative Scoring by Quarter</div>
+        <canvas id="cumulativeChart" height="100"></canvas>
+      </div>
+
+      <!-- Top performers -->
+      <div class="top-performers">
+        <div class="performers-col">
+          <div class="performers-heading">{{ game.away_team.abbreviation }} Leaders</div>
+          {% for p in away_top[:3] %}
+          <div class="performer-row">
+            <span class="perf-name">{{ p.name }}</span>
+            <span class="perf-stats">{{ p.pts }} PTS · {{ p.reb }} REB · {{ p.ast }} AST</span>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="performers-col">
+          <div class="performers-heading">{{ game.home_team.abbreviation }} Leaders</div>
+          {% for p in home_top[:3] %}
+          <div class="performer-row">
+            <span class="perf-name">{{ p.name }}</span>
+            <span class="perf-stats">{{ p.pts }} PTS · {{ p.reb }} REB · {{ p.ast }} AST</span>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+    </div><!-- /overview-content -->
+
+    <div class="scroll-hint">Scroll to explore ↓</div>
+  </section>
+
+
+  <!-- ══════════════ QUARTER MACRO ══════════════ -->
+  {# Jinja2 macro for each quarter section #}
+  {% macro quarter_section(q_num, q_key) %}
+  {% set ql = game.quarter_leaders[q_key] %}
+  {% set hl = game.line_score.home[q_key] %}
+  {% set al = game.line_score.away[q_key] %}
+
+  <section class="scroll-section section-quarter" id="section-{{ q_key }}">
+    <div class="quarter-header">
+      <div class="quarter-label">{{ q_num }} Quarter</div>
+      <div class="quarter-matchup">
+        <span class="qt-score" style="color:{{ game.away_team.color }}">{{ al }}</span>
+        <span class="qt-team">{{ game.away_team.abbreviation }}</span>
+        <span class="qt-divider">·</span>
+        <span class="qt-team">{{ game.home_team.abbreviation }}</span>
+        <span class="qt-score" style="color:{{ game.home_team.color }}">{{ hl }}</span>
+      </div>
+      {% if al > hl %}
+        <div class="quarter-winner" style="color:{{ game.away_team.color }}">
+          {{ game.away_team.abbreviation }} won the quarter +{{ al - hl }}
+        </div>
+      {% elif hl > al %}
+        <div class="quarter-winner" style="color:{{ game.home_team.color }}">
+          {{ game.home_team.abbreviation }} won the quarter +{{ hl - al }}
+        </div>
+      {% else %}
+        <div class="quarter-winner">Tied quarter</div>
+      {% endif %}
+    </div>
+
+    <div class="quarter-body">
+      <!-- Quarter bar chart -->
+      <div class="quarter-chart-wrap">
+        <canvas id="quarterChart{{ q_num }}" height="160"></canvas>
+      </div>
+
+      <!-- Leaders + notes -->
+      <div class="quarter-details">
+        <div class="leader-cards">
+          <div class="leader-card" style="border-left:4px solid {{ game.away_team.color }}">
+            <div class="lc-team">{{ game.away_team.abbreviation }}</div>
+            <div class="lc-name">{{ ql.away.name }}</div>
+            <div class="lc-pts">{{ ql.away.pts }} PTS</div>
+          </div>
+          <div class="leader-card" style="border-left:4px solid {{ game.home_team.color }}">
+            <div class="lc-team">{{ game.home_team.abbreviation }}</div>
+            <div class="lc-name">{{ ql.home.name }}</div>
+            <div class="lc-pts">{{ ql.home.pts }} PTS</div>
+          </div>
+        </div>
+
+        <div class="quarter-note">
+          {{ game.game_notes[q_key] }}
+        </div>
+
+        <!-- Running score after this quarter -->
+        <div class="running-score-wrap">
+          <div class="running-label">Score after {{ q_num }} Quarter</div>
+          <div class="running-score">
+            <span style="color:{{ game.away_team.color }}">
+              {{ game.away_team.abbreviation }}
+              <strong>
+              {% set ns = namespace(tot=0) %}
+              {% for qk in ['q1','q2','q3','q4'] %}
+                {% if loop.index <= q_num[-1]|int %}
+                  {% set ns.tot = ns.tot + game.line_score.away[qk] %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.tot }}
+              </strong>
+            </span>
+            <span class="rs-dash">–</span>
+            <span style="color:{{ game.home_team.color }}">
+              <strong>
+              {% set ns2 = namespace(tot=0) %}
+              {% for qk in ['q1','q2','q3','q4'] %}
+                {% if loop.index <= q_num[-1]|int %}
+                  {% set ns2.tot = ns2.tot + game.line_score.home[qk] %}
+                {% endif %}
+              {% endfor %}
+              {{ ns2.tot }}
+              </strong>
+              {{ game.home_team.abbreviation }}
+            </span>
+          </div>
+        </div>
+
+      </div><!-- /quarter-details -->
+    </div><!-- /quarter-body -->
+  </section>
+  {% endmacro %}
+
+  {{ quarter_section("1st", "q1") }}
+  {{ quarter_section("2nd", "q2") }}
+  {{ quarter_section("3rd", "q3") }}
+  {{ quarter_section("4th", "q4") }}
+
+
+  <!-- ══════════════ SECTION 6: BOX SCORE ══════════════ -->
+  <section class="scroll-section section-boxscore" id="section-boxscore">
+    <h2 class="section-title">Full Box Score</h2>
+
+    {% for team_key, players, team in [
+        ('away', game.away_players, game.away_team),
+        ('home', game.home_players, game.home_team)
+       ] %}
+    <div class="box-table-wrap">
+      <div class="box-team-header" style="border-left:6px solid {{ team.color }}">
+        {{ team.name }}
+        <span class="box-total">{{ game.line_score[team_key].total }} PTS</span>
+      </div>
+      <div class="table-scroll">
+        <table class="box-table">
+          <thead>
+            <tr>
+              <th class="col-name">Player</th>
+              <th>Pos</th>
+              <th>MIN</th>
+              <th>PTS</th>
+              <th>REB</th>
+              <th>AST</th>
+              <th>STL</th>
+              <th>BLK</th>
+              <th>FG</th>
+              <th>3PT</th>
+              <th>FT</th>
+              <th>TO</th>
+              <th>PF</th>
+              <th>+/-</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in players %}
+            <tr class="{% if loop.index <= 5 %}starter-row{% endif %}">
+              <td class="col-name">{{ p.name }}</td>
+              <td>{{ p.position }}</td>
+              <td>{{ p.min }}</td>
+              <td class="stat-pts">{{ p.pts }}</td>
+              <td>{{ p.reb }}</td>
+              <td>{{ p.ast }}</td>
+              <td>{{ p.stl }}</td>
+              <td>{{ p.blk }}</td>
+              <td>{{ p.fg }}</td>
+              <td>{{ p.fg3 }}</td>
+              <td>{{ p.ft }}</td>
+              <td>{{ p.to }}</td>
+              <td>{{ p.pf }}</td>
+              <td class="{% if p.pm > 0 %}pm-pos{% elif p.pm < 0 %}pm-neg{% endif %}">
+                {{ '+' if p.pm > 0 else '' }}{{ p.pm }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+
+    <div class="back-to-top">
+      <a href="#section-overview">↑ Back to Overview</a>
+      <a href="{{ url_for('index') }}">← All Games</a>
+    </div>
+  </section>
+
+</main><!-- /scroll-container -->
+
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+  // ── Chart data from Flask ──
+  const GAME = {
+    homeColor: "{{ game.home_team.color }}",
+    awayColor: "{{ game.away_team.color }}",
+    homeAbbr:  "{{ game.home_team.abbreviation }}",
+    awayAbbr:  "{{ game.away_team.abbreviation }}",
+    cumulative: {
+      labels: {{ cumulative.labels | tojson }},
+      home:   {{ cumulative.home   | tojson }},
+      away:   {{ cumulative.away   | tojson }},
+    },
+    quarterBars: {
+      labels: {{ quarter_bars.labels | tojson }},
+      home:   {{ quarter_bars.home   | tojson }},
+      away:   {{ quarter_bars.away   | tojson }},
+    },
+  };
+</script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}

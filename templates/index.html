@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}NBA Playoffs Dashboard – Select a Game{% endblock %}
+
+{% block body %}
+<div class="selector-page">
+  <header class="selector-header">
+    <h1>🏀 NBA Playoffs Dashboard</h1>
+    <p class="subtitle">Choose a game to explore its story</p>
+  </header>
+
+  <div class="game-cards">
+    {% for g in games %}
+    <a class="game-card" href="{{ url_for('game', game_id=g.game_id) }}">
+      <div class="card-series">{{ g.series_info }}</div>
+      <div class="card-matchup">
+        <span class="card-team">{{ g.away }}</span>
+        <span class="card-score">{{ g.away_pts }}</span>
+        <span class="card-at">@</span>
+        <span class="card-score">{{ g.home_pts }}</span>
+        <span class="card-team">{{ g.home }}</span>
+      </div>
+      <div class="card-date">{{ g.game_date }}</div>
+    </a>
+    {% endfor %}
+  </div>
+
+  <div class="fetch-form">
+    <p>Load a game by NBA Game ID:</p>
+    <form action="" method="get" onsubmit="window.location='/game/'+document.getElementById('gid').value; return false;">
+      <input id="gid" type="text" placeholder="e.g. 0042300401" maxlength="12" />
+      <button type="submit">Load Game</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
