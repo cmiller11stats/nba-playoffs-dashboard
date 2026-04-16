@@ -1,6 +1,6 @@
 # NBA Playoffs Dashboard
 
-A **Flask** web app that tells the story of an NBA playoff game through a full-page scroll experience — think interactive blog meets box score.
+A **Flask** web app that tells the story of an NBA playoff game through a full-page scroll experience — think interactive blog meets box score
 
 ## Features
 
