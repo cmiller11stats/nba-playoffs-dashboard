@@ -11,17 +11,24 @@ Routes:
 """
 
 import os
+from datetime import date, timedelta, datetime as _dt
 
 from flask import Flask, render_template, jsonify, redirect, url_for, request, abort
-from data_loader import get_game_data, list_cached_games, _validate_game_id
+from data_loader import get_game_data, list_cached_games, _validate_game_id, get_scoreboard_for_date
 
 app = Flask(__name__)
 
 
 @app.route("/")
 def index():
-    games = list_cached_games()
-    return render_template("index.html", games=games)
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    date_str = request.args.get("date", "").strip() or yesterday
+    try:
+        _dt.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        date_str = yesterday
+    games = get_scoreboard_for_date(date_str)
+    return render_template("index.html", games=games, selected_date=date_str)
 
 
 @app.route("/game/<game_id>")

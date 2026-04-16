@@ -324,3 +324,114 @@ def list_cached_games() -> list[dict]:
             "away_pts": SAMPLE_GAME["line_score"]["away"]["total"],
         })
     return games
+
+
+def get_scoreboard_for_date(date_str: str) -> list[dict]:
+    """Return game summaries for a given date (YYYY-MM-DD). Caches completed past dates."""
+    from datetime import datetime, date as _date
+
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+
+    cache_path = CACHE_DIR / f"scoreboard_{date_str}.json"
+    today = _date.today()
+
+    # Serve from cache for past dates (results are final)
+    if dt < today and cache_path.exists():
+        try:
+            return json.loads(cache_path.read_text())
+        except Exception:
+            pass
+
+    try:
+        from nba_api.stats.endpoints import scoreboardv2
+
+        time.sleep(0.6)
+        sb = scoreboardv2.ScoreboardV2(
+            game_date=dt.strftime("%m/%d/%Y"),
+            league_id="00",
+            day_offset=0,
+            timeout=15,
+        )
+        dfs = sb.get_data_frames()
+        header_df = dfs[0]
+        line_df = dfs[1]
+        series_df = dfs[2] if len(dfs) > 2 else None
+
+        def _safe_int(val):
+            try:
+                if val is None:
+                    return None
+                f = float(val)
+                return None if f != f else int(f)  # NaN guard
+            except (TypeError, ValueError):
+                return None
+
+        def _team_name(ls, abbr):
+            if ls is None:
+                return abbr
+            city = str(ls["TEAM_CITY_NAME"]) if "TEAM_CITY_NAME" in ls.index else ""
+            nick = str(ls["TEAM_NICKNAME"]) if "TEAM_NICKNAME" in ls.index else abbr
+            return f"{city} {nick}".strip() or abbr
+
+        games = []
+        for _, hrow in header_df.iterrows():
+            gid = str(hrow["GAME_ID"])
+            status = str(hrow.get("GAME_STATUS_TEXT", "")).strip()
+            home_tid = _safe_int(hrow.get("HOME_TEAM_ID"))
+            away_tid = _safe_int(hrow.get("VISITOR_TEAM_ID"))
+
+            gls = line_df[line_df["GAME_ID"] == gid]
+            home_rows = gls[gls["TEAM_ID"] == home_tid] if home_tid is not None else gls.iloc[0:0]
+            away_rows = gls[gls["TEAM_ID"] == away_tid] if away_tid is not None else gls.iloc[0:0]
+            hls = home_rows.iloc[0] if not home_rows.empty else None
+            als = away_rows.iloc[0] if not away_rows.empty else None
+
+            home_abbr = str(hls["TEAM_ABBREVIATION"]) if hls is not None else "HOM"
+            away_abbr = str(als["TEAM_ABBREVIATION"]) if als is not None else "AWY"
+            home_pts = _safe_int(hls["PTS"] if hls is not None else None)
+            away_pts = _safe_int(als["PTS"] if als is not None else None)
+
+            # Build series standing label
+            series_info = "NBA Playoffs"
+            if series_df is not None and not series_df.empty and "GAME_ID" in series_df.columns:
+                sr_rows = series_df[series_df["GAME_ID"] == gid]
+                if not sr_rows.empty:
+                    sr = sr_rows.iloc[0]
+                    hw = _safe_int(sr.get("HOME_TEAM_WINS")) or 0
+                    hl = _safe_int(sr.get("HOME_TEAM_LOSSES")) or 0
+                    leader = str(sr.get("SERIES_LEADER", "")).strip()
+                    if leader and leader.lower() not in ("", "nan"):
+                        w, l = max(hw, hl), min(hw, hl)
+                        series_info = (
+                            f"{leader} leads {w}\u20133{l}"
+                            if w != l
+                            else f"Series tied {w}\u2013{w}"
+                        )
+                    elif hw + hl > 0:
+                        series_info = f"Series {hw}\u2013{hl}"
+
+            games.append({
+                "game_id": gid,
+                "game_date": date_str,
+                "series_info": series_info,
+                "home": home_abbr,
+                "away": away_abbr,
+                "home_name": _team_name(hls, home_abbr),
+                "away_name": _team_name(als, away_abbr),
+                "home_pts": home_pts,
+                "away_pts": away_pts,
+                "status": status,
+            })
+
+        # Cache completed past dates
+        if games and dt < today:
+            cache_path.write_text(json.dumps(games, indent=2))
+
+        return games
+
+    except Exception as exc:
+        print(f"[data_loader] Scoreboard fetch failed for {date_str}: {exc}")
+        return []

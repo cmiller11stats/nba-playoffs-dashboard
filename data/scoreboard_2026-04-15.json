@@ -1,0 +1,26 @@
+[
+  {
+    "game_id": "0052500101",
+    "game_date": "2026-04-15",
+    "series_info": "Philadelphia leads 1\u201330",
+    "home": "PHI",
+    "away": "ORL",
+    "home_name": "Philadelphia PHI",
+    "away_name": "Orlando ORL",
+    "home_pts": 109,
+    "away_pts": 97,
+    "status": "Final"
+  },
+  {
+    "game_id": "0052500131",
+    "game_date": "2026-04-15",
+    "series_info": "Golden State leads 1\u201330",
+    "home": "LAC",
+    "away": "GSW",
+    "home_name": "LA LAC",
+    "away_name": "Golden State GSW",
+    "home_pts": 121,
+    "away_pts": 126,
+    "status": "Final"
+  }
+]

@@ -1,31 +1,55 @@
 {% extends "base.html" %}
-{% block title %}NBA Playoffs Dashboard – Select a Game{% endblock %}
+{% block title %}NBA Playoffs Dashboard – Games{% endblock %}
 
 {% block body %}
 <div class="selector-page">
   <header class="selector-header">
     <h1>🏀 NBA Playoffs Dashboard</h1>
-    <p class="subtitle">Choose a game to explore its story</p>
+    <p class="subtitle">Playoff scores &amp; game stories</p>
   </header>
 
+  <div class="date-bar">
+    <label class="date-label" for="game-date">Date</label>
+    <input type="date" id="game-date" class="date-input" value="{{ selected_date }}" />
+  </div>
+
+  {% if games %}
   <div class="game-cards">
     {% for g in games %}
+    {% set is_final = g.status | lower == 'final' %}
+    {% set has_score = g.home_pts is not none and g.away_pts is not none %}
+    {% set home_wins = is_final and has_score and g.home_pts > g.away_pts %}
+    {% set away_wins = is_final and has_score and g.away_pts > g.home_pts %}
     <a class="game-card" href="{{ url_for('game', game_id=g.game_id) }}">
       <div class="card-series">{{ g.series_info }}</div>
       <div class="card-matchup">
-        <span class="card-team">{{ g.away }}</span>
-        <span class="card-score">{{ g.away_pts }}</span>
+        <span class="card-team{% if away_wins %} card-team--winner{% endif %}">{{ g.away }}</span>
+        {% if has_score %}
+        <span class="card-score{% if away_wins %} card-score--winner{% endif %}">{{ g.away_pts }}</span>
+        {% endif %}
         <span class="card-at">@</span>
-        <span class="card-score">{{ g.home_pts }}</span>
-        <span class="card-team">{{ g.home }}</span>
+        {% if has_score %}
+        <span class="card-score{% if home_wins %} card-score--winner{% endif %}">{{ g.home_pts }}</span>
+        {% endif %}
+        <span class="card-team{% if home_wins %} card-team--winner{% endif %}">{{ g.home }}</span>
       </div>
-      <div class="card-date">{{ g.game_date }}</div>
+      {% set is_live = 'Q' in g.status or g.status == 'HT' %}
+      <div class="card-status{% if is_live %} card-status--live{% endif %}">
+        {% if is_live %}● {% endif %}{{ g.status }}
+      </div>
     </a>
     {% endfor %}
   </div>
+  {% else %}
+  <div class="no-games">
+    <div class="no-games-icon">📅</div>
+    <p>No games found for <strong>{{ selected_date }}</strong>.</p>
+    <p class="no-games-hint">Try a different date or check back during the playoffs.</p>
+  </div>
+  {% endif %}
 
   <div class="fetch-form">
-    <p>Load a game by NBA Game ID:</p>
+    <p>Or load a specific game by NBA Game ID:</p>
     <form action="" method="get" onsubmit="
       var gid = document.getElementById('gid').value.trim();
       if (/^\d{10}$/.test(gid)) { window.location = '/game/' + gid; }
@@ -36,4 +60,12 @@
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById('game-date').addEventListener('change', function () {
+    window.location.href = '/?date=' + this.value;
+  });
+</script>
 {% endblock %}
